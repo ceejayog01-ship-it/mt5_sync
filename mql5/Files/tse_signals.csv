@@ -1,0 +1,4 @@
+signal_id,instrument,direction,design,entry,sl,tp,horizon_bars
+tse-demo-20261108-0001-d9506d,EURUSD,BUY,A,1.08000,1.07700,,48
+tse-demo-20261108-0002-f62ce9,GBPUSD,SELL,B,1.08120,1.08420,1.07620,48
+tse-demo-20261108-0003-15fe70,XAUUSD,BUY,A,1.08240,1.07940,,48
