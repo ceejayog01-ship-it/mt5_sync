@@ -1,0 +1,10 @@
+{
+  "_note": "Volatility/trend state cut-offs (33rd / 67th percentile over the TRAIN period). EURUSD is the frozen TSE research value. Add other pairs with calibrate_thresholds.py.",
+  "EURUSD": {
+    "vol48_p33": 0.000541804,
+    "vol48_p67": 0.000680658,
+    "trend96_p33": -0.00148102,
+    "trend96_p67": 0.00154548,
+    "source": "TSE TRAIN 2023 (frozen)"
+  }
+}
