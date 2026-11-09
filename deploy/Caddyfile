@@ -1,0 +1,4 @@
+{$TSE_DOMAIN} {
+    encode gzip
+    reverse_proxy tse-ingress:8080
+}
