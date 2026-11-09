@@ -26,7 +26,7 @@ scan_once.py  (51 strategies)
 ```
 
 ## Out of scope of this repository
-- Live order placement
-- Always-on terminal
+- Order placement inside this Python code (the EA does it; see README item 3b)
+- Always-on terminal (the container is started per run)
 - Liberatti bridge
 - Rewriting any of the 51 strategies into MQL5
