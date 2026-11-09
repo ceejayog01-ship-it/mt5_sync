@@ -1,0 +1,50 @@
+# LOCAL / manual Hudsonventura MT5 terminal (browser view via noVNC). The scheduled GitHub
+# Actions run uses docker-compose.actions.yml instead.
+#
+# The `mt5` service mirrors upstream src/docker-compose.yml
+# (https://github.com/hudsonventura/MT5_Docker), built from vendor/MT5_Docker/src.
+# Deviations from upstream are marked "TSE:" below; everything else is verbatim.
+#
+# Flow:
+#   Python TSE -> state/signals_canonical.jsonl (audit)
+#              -> .data/MQL5/Files/tse_signals.csv   (mt5_execute.py)
+#   EA TSE_SignalExecutor.ex5 (attached to a chart) polls MQL5/Files/tse_signals.csv.
+#
+# Compile the EA with the separate upstream-style file:
+#   docker compose -f docker-compose-mt5-compiler.yml up
+# then copy mql5/Experts/TSE_SignalExecutor.ex5 -> .data/MQL5/Experts/
+#
+# First run: open http://localhost:6901/vnc.html?password=my_vnc_password
+
+services:
+
+  mt5:
+    image: tse-mt5:vendored
+    build:
+       context: ./vendor/MT5_Docker/src
+       dockerfile: ./Dockerfile
+
+    ports:
+      - "5901:5901" #VNC
+      - "6901:6901" #noVNO (via browser: http://localhost:6901/vnc.html or http://localhost:6901/vnc.html?password=my_vnc_password)
+      # TSE: upstream publishes these on all host interfaces. For local use bind them as
+      # "127.0.0.1:5901:5901" / "127.0.0.1:6901:6901". GitHub Actions uses docker-compose.actions.yml (no ports).
+
+    environment:
+      - VNC_PW=my_vnc_password      #VNC password. Change it as you like
+      - SCREEN_RESOLUTION=1024x768  #You can change as you want. Default is 1024x768
+
+    volumes:
+      - ./.data/MQL5/:/home/headless/.wine/drive_c/Program Files/MetaTrader 5/MQL5/:ro  # MQL5 folder (EAs, indicators, scripts, etc.)
+      #- ./.data/MQL5/servers.dat:/home/headless/.wine/drive_c/Program Files/MetaTrader 5/Config/servers.dat
+      # Uncomment this if you have trouble with login in your broker. See section `After Install` to get more information
+
+      # TSE: the one deliberate deviation. The EA writes MQL5/Files/tse_processed.txt
+      # (SaveProcessedIds in TSE_SignalExecutor.mq5) and returns silently if the write fails;
+      # with the upstream read-only mount, a container restart would forget handled signal IDs
+      # and re-trade them. This nested read-write mount re-opens only the Files folder.
+      - ./.data/MQL5/Files/:/home/headless/.wine/drive_c/Program Files/MetaTrader 5/MQL5/Files/
+
+    # Optional parameters:
+    restart: always            # Automatically restarts the container if it stops
+    mem_limit: 1024m           # Best practice. The container typically uses around 600MB
