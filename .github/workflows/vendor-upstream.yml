@@ -1,0 +1,50 @@
+name: Vendor upstream MT5_Docker
+
+# One-time (and for later updates): copies hudsonventura/MT5_Docker at a pinned commit into
+# vendor/MT5_Docker/ and commits it, so nothing has to be uploaded by hand.
+# Change UPSTREAM_COMMIT to update, then run "Compile EA" and a dry-run scan.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  UPSTREAM_COMMIT: 3537cc0f4a7ad91c1cc7d2645f0af9b6ceee36cf
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy upstream at the pinned commit
+        run: |
+          git clone https://github.com/hudsonventura/MT5_Docker /tmp/up
+          git -C /tmp/up checkout "$UPSTREAM_COMMIT"
+          mkdir -p vendor/MT5_Docker
+          rm -rf vendor/MT5_Docker/src vendor/MT5_Docker/assets
+          cp -r /tmp/up/src /tmp/up/assets vendor/MT5_Docker/
+          cp /tmp/up/README.md /tmp/up/servers.dat vendor/MT5_Docker/
+          cat > vendor/MT5_Docker/UPSTREAM.md <<DOC
+          # Vendored upstream
+          - Source: https://github.com/hudsonventura/MT5_Docker
+          - Commit: $UPSTREAM_COMMIT
+          - Copied unmodified by the "Vendor upstream MT5_Docker" workflow: src/, assets/, README.md, servers.dat
+          - Upstream had no LICENSE file at this commit; confirm the author's terms before making this repo public.
+          - Do not edit src/; keep local changes in the compose files.
+          DOC
+          sed -i 's/^          //' vendor/MT5_Docker/UPSTREAM.md
+          test -f vendor/MT5_Docker/src/Dockerfile
+
+      - name: Commit
+        run: |
+          git config user.name "tse-bot"
+          git config user.email "tse-bot@users.noreply.github.com"
+          git add vendor/MT5_Docker
+          git diff --staged --quiet && { echo "already up to date"; exit 0; }
+          git commit -m "vendor: hudsonventura/MT5_Docker @ ${UPSTREAM_COMMIT:0:7}"
+          git pull --rebase || true
+          git push
