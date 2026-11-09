@@ -1,0 +1,33 @@
+# Local demonstration of the Signal Interface + Receiver path.
+# Does NOT start a real MetaTrader 5 terminal or Liberatti bridge.
+# Hudsonventura supplies the actual MT5 Docker environment.
+
+version: "3.9"
+
+services:
+  signal-exporter:
+    image: python:3.11-slim
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: >
+      bash -c "pip install -q -r requirements.txt &&
+               python -m signal_interface.exporter --demo --count 6 --out /app/example_signals/compose_batch.jsonl"
+    networks: [tse-net]
+
+  mt5-receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile.mt5-receiver
+    volumes:
+      - ./example_signals:/data:ro
+      - ./audit:/audit
+    command: ["--input", "/data/compose_batch.jsonl", "--audit-dir", "/audit"]
+    depends_on:
+      signal-exporter:
+        condition: service_completed_successfully
+    networks: [tse-net]
+
+networks:
+  tse-net:
+    driver: bridge

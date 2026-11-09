@@ -1,0 +1,9 @@
+FROM python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt fastapi uvicorn
+COPY signal_interface/ ./signal_interface/
+COPY mt5_receiver/ ./mt5_receiver/
+ENV PYTHONPATH=/app TSE_RECEIVER_DATA=/data TSE_MT5_FILES=/mt5-files
+EXPOSE 8080
+CMD ["uvicorn", "mt5_receiver.http_api:app", "--host", "0.0.0.0", "--port", "8080", "--proxy-headers"]

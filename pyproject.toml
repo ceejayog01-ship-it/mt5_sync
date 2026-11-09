@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tse-mt5-integration"
+version = "1.0.0"
+description = "TSE original engine + Signal Output Interface + Hudsonventura-compatible receiver"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "requests>=2.31.0",
+    "pydantic>=2.5.0",
+    "orjson>=3.9.0",
+    "click>=8.1.0",
+    "rich>=13.7.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4.0", "pytest-json-report>=1.5.0"]
+
+[tool.setuptools.packages.find]
+include = ["signal_interface*", "mt5_receiver*", "states*", "utils*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

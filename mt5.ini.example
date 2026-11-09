@@ -1,0 +1,28 @@
+# Copy to .data/MQL5/Files/mt5.ini  (never commit the real file: it holds broker credentials)
+# Upstream start.sh launches: terminal64.exe /config:"C:\Program Files\MetaTrader 5\MQL5\Files\mt5.ini"
+# Full example with every key: src/mt5.ini in https://github.com/hudsonventura/MT5_Docker
+# Option reference: https://www.metatrader5.com/en/terminal/help/start_advanced/start
+
+[Common]
+Login=your_brokers_acount_number
+Password=Your_acocunt_pass
+Server=Alpari-MT5-Demo
+NewsEnable=0
+CertInstall=0
+Services=4294967295
+
+[Experts]
+AllowLiveTrading=1
+AllowDllImport=1
+Enabled=1
+Account=1
+Profile=1
+Chart=0
+Api=1
+WebRequest=1
+
+# Upstream ships this block commented out (with a different EA). Untested here:
+# [StartUp]
+# Expert=TSE_SignalExecutor.ex5
+# Symbol=EURUSD
+# Period=M30

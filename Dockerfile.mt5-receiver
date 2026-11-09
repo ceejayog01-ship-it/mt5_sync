@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+LABEL org.opencontainers.image.title="TSE MT5 Signal Receiver"
+LABEL org.opencontainers.image.description="Receives, validates and audits signals from the original TSE Python engine (Hudsonventura path)"
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY signal_interface/ ./signal_interface/
+COPY mt5_receiver/ ./mt5_receiver/
+ENTRYPOINT ["python", "-m", "mt5_receiver.receiver"]
+CMD ["--help"]
