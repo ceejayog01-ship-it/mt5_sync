@@ -1,0 +1,59 @@
+name: Compile EA (Hudsonventura build.sh)
+
+# Compiles mql5/Experts/*.mq5 with upstream's compiler compose file and commits the .ex5,
+# so the scheduled scan does not have to install MT5 twice per run.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mql5/Experts/**.mq5"
+      - "mql5/Include/**"
+      - "docker-compose-mt5-compiler.yml"
+      - "vendor/MT5_Docker/src/**"
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build MT5 image from vendor/MT5_Docker/src (layer-cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vendor/MT5_Docker/src
+          file: ./vendor/MT5_Docker/src/Dockerfile
+          load: true
+          tags: tse-mt5:vendored
+          cache-from: type=gha,scope=tse-mt5
+          cache-to: type=gha,scope=tse-mt5,mode=max
+
+      - name: Compile (docker compose -f docker-compose-mt5-compiler.yml up)
+        run: |
+          mkdir -p mql5/Experts mql5/Include
+          chmod -R a+rwX mql5          # container user is uid 1000
+          docker compose -f docker-compose-mt5-compiler.yml up --pull never --exit-code-from mt5-compiler || true
+          docker compose -f docker-compose-mt5-compiler.yml logs --no-color > compile.log || true
+          cat compile.log | tail -60
+          test -f mql5/Experts/TSE_SignalExecutor.ex5 || { echo "::error::no .ex5 produced (check compile.log; see docs/HUDSONVENTURA.md on Trade.mqh)"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compile-log
+          path: compile.log
+
+      - name: Commit .ex5
+        run: |
+          git config user.name "tse-bot"
+          git config user.email "tse-bot@users.noreply.github.com"
+          git add mql5/Experts/*.ex5
+          git diff --staged --quiet || git commit -m "build: TSE_SignalExecutor.ex5"
+          git pull --rebase || true
+          git push
