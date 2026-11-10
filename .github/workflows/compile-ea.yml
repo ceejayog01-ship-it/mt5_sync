@@ -1,0 +1,102 @@
+name: Compile EA (Hudsonventura build.sh)
+
+# Compiles mql5/Experts/*.mq5 with upstream's compiler compose file and commits the .ex5,
+# so the scheduled scan does not have to install MT5 twice per run.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "mql5/Experts/**.mq5"
+      - "mql5/Include/**"
+      - "docker-compose-mt5-compiler.yml"
+      - "vendor/MT5_Docker/src/**"
+
+permissions:
+  contents: write
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build MT5 image from vendor/MT5_Docker/src (layer-cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vendor/MT5_Docker/src
+          file: ./vendor/MT5_Docker/src/Dockerfile
+          load: true
+          tags: tse-mt5:vendored
+          cache-from: type=gha,scope=tse-mt5
+          cache-to: type=gha,scope=tse-mt5,mode=max
+
+      - name: Check the EA source is in the repo
+        run: |
+          ls -la mql5/Experts 2>/dev/null || true
+          if ! ls mql5/Experts/*.mq5 >/dev/null 2>&1; then
+            echo "::error::No .mq5 file in mql5/Experts/. Upload mql5/Experts/TSE_SignalExecutor.mq5 to the repo, then re-run."
+            exit 1
+          fi
+
+      - name: Compile (pass 1; if the stock MQL5 library is missing, fetch it from the container and retry)
+        timeout-minutes: 25
+        run: |
+          mkdir -p compile-diag mql5/Include
+          chmod -R a+rwX mql5          # container user is uid 1000
+          COMPOSE="docker compose -f docker-compose-mt5-compiler.yml"
+
+          run_compile() {   # $1 = pass label
+            timeout 600 $COMPOSE up --pull never --exit-code-from mt5-compiler > "compile-diag/compose-up-$1.log" 2>&1 || echo "compose up ($1) exit: $?"
+            docker cp mt5-compiler:/tmp/wine.log "compile-diag/wine-$1.log" 2>/dev/null || true
+            : > "compile-diag/metaeditor-$1.txt"
+            for f in $(find mql5 -name '*.log'); do
+              echo "== $f" >> "compile-diag/metaeditor-$1.txt"
+              iconv -f UTF-16 -t UTF-8 "$f" >> "compile-diag/metaeditor-$1.txt" 2>/dev/null || cat "$f" >> "compile-diag/metaeditor-$1.txt"
+              rm -f "$f"
+            done
+            echo "---- MetaEditor output ($1)"; cat "compile-diag/metaeditor-$1.txt"
+          }
+
+          run_compile pass1
+
+          if [ ! -f mql5/Experts/TSE_SignalExecutor.ex5 ]; then
+            echo "---- pass 1 produced no .ex5; looking for the stock MQL5 library inside the container"
+            docker commit mt5-compiler tse-mt5-installed > /dev/null
+            docker run --rm --entrypoint find tse-mt5-installed / -ipath '*Include/Trade/Trade.mqh' -not -path '/proc/*' 2>/dev/null | tee compile-diag/found-trade-mqh.txt || true
+            docker run --rm --entrypoint find tse-mt5-installed / -type d -ipath '*MQL5*' -iname Include -not -path '/proc/*' 2>/dev/null > compile-diag/found-include-dirs.txt || true
+            docker run --rm --entrypoint find tse-mt5-installed / -iname 'MetaEditor64.exe' -not -path '/proc/*' 2>/dev/null > compile-diag/found-metaeditor.txt || true
+            echo "Include dirs:"; cat compile-diag/found-include-dirs.txt; echo "MetaEditor:"; cat compile-diag/found-metaeditor.txt
+            TRADE="$(head -1 compile-diag/found-trade-mqh.txt)"
+            if [ -n "$TRADE" ]; then
+              STD="$(dirname "$(dirname "$TRADE")")"
+              echo "Using stock Include from: $STD (CI only, not committed)"
+              docker cp "mt5-compiler:$STD/." mql5/Include/
+              chmod -R a+rwX mql5
+              $COMPOSE down || true
+              run_compile pass2
+            else
+              echo "::error::Trade.mqh is not present anywhere in the container; see compile-diag/found-*.txt"
+            fi
+          fi
+
+          ls -laR mql5 > compile-diag/mql5-listing.txt
+          test -f mql5/Experts/TSE_SignalExecutor.ex5 || { echo "::error::no .ex5 produced; download the compile-diag artifact"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compile-diag
+          path: compile-diag/
+
+      - name: Commit .ex5
+        run: |
+          git config user.name "tse-bot"
+          git config user.email "tse-bot@users.noreply.github.com"
+          git add mql5/Experts/*.ex5
+          git diff --staged --quiet || git commit -m "build: TSE_SignalExecutor.ex5"
+          git pull --rebase || true
+          git push
