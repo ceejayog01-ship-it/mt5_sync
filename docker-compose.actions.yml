@@ -1,0 +1,26 @@
+# Ephemeral MT5 terminal for GitHub Actions (started and stopped inside one workflow run).
+# Same Dockerfile and mounts as upstream src/docker-compose.yml, built from vendor/MT5_Docker/src
+# (the workflow builds it with layer caching and tags it tse-mt5:vendored), with:
+#   - NO published ports (nothing listens on the runner's network; no VNC/noVNC access)
+#   - restart: "no" (the container ends with the job)
+#   - the MQL5 folder mounted read-write instead of upstream's :ro (see the comment on volumes)
+# Local debugging with a browser view: use docker-compose.hudsonventura.yml instead.
+
+services:
+  mt5:
+    image: tse-mt5:vendored
+    build:
+       context: ./vendor/MT5_Docker/src
+       dockerfile: ./Dockerfile
+    container_name: tse-mt5
+    environment:
+      - VNC_PW=unused_no_ports_published
+      - SCREEN_RESOLUTION=1024x768
+    volumes:
+      # Upstream mounts this folder read-only (:ro). Here it is read-write: the container is thrown
+      # away after each run, and a read-only MQL5 folder can stop the MT5 installer / first start
+      # from creating the folders and files it expects (and would block the candle export,
+      # processed-ID file and EA journal).
+      - ./.data/MQL5/:/home/headless/.wine/drive_c/Program Files/MetaTrader 5/MQL5/
+    restart: "no"
+    mem_limit: 2048m
