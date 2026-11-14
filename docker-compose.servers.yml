@@ -1,0 +1,7 @@
+# Added by scripts/run_mt5_executor.py only when config/servers.dat exists.
+# MT5 can only log in to a broker whose server it has "searched for" once; upstream's start.sh otherwise
+# downloads its own servers.dat (which may not list your broker). Read-only so start.sh cannot replace it.
+services:
+  mt5:
+    volumes:
+      - ./.data/servers.dat:/home/headless/.wine/drive_c/Program Files/MetaTrader 5/Config/servers.dat:ro
