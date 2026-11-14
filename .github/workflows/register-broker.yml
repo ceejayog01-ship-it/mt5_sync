@@ -1,0 +1,70 @@
+name: Register broker server (one-time)
+
+# MT5 can only log in to a broker whose server it has "searched for" once. This starts the container,
+# drives the Open-an-Account dialog, and (if servers.dat changed) commits config/servers.dat, which the
+# scan then mounts read-only. Screenshots of every step are in the artifact (audit/screen_reg_*.png).
+
+on:
+  workflow_dispatch:
+    inputs:
+      broker_search:
+        description: "Text to search in the Open an Account dialog (your broker's company name)"
+        required: false
+        default: "Headway"
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -q pillow numpy
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build MT5 image from vendor/MT5_Docker/src (layer-cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./vendor/MT5_Docker/src
+          file: ./vendor/MT5_Docker/src/Dockerfile
+          load: true
+          tags: tse-mt5:vendored
+          cache-from: type=gha,scope=tse-mt5
+          cache-to: type=gha,scope=tse-mt5,mode=max
+
+      - name: Register the broker in the terminal and capture servers.dat
+        id: reg
+        env:
+          BROKER_SEARCH: ${{ github.event.inputs.broker_search || 'Headway' }}
+          DRY_RUN: "true"
+          KB_PAIRS: ${{ vars.KB_PAIRS || 'XAUUSD,EURUSD,GBPUSD,USDJPY,AUDUSD' }}
+          KB_EXEC_PAIRS: ${{ vars.KB_EXEC_PAIRS || 'EURUSD' }}
+          SYMBOL_SUFFIX: ${{ vars.SYMBOL_SUFFIX || '' }}
+          MT5_LOGIN: ${{ secrets.MT5_LOGIN }}
+          MT5_PASSWORD: ${{ secrets.MT5_PASSWORD }}
+          MT5_SERVER: ${{ secrets.MT5_SERVER }}
+        run: python scripts/register_broker.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: register-audit
+          path: audit/
+
+      - name: Commit config/servers.dat
+        if: steps.reg.outputs.changed == 'true'
+        run: |
+          git config user.name "tse-bot"
+          git config user.email "tse-bot@users.noreply.github.com"
+          git add -f config/servers.dat
+          git commit -m "config: servers.dat with the broker server registered"
+          git pull --rebase || true
+          git push
