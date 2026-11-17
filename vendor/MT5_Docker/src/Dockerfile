@@ -57,7 +57,15 @@ RUN dpkg --add-architecture i386 && \
     mkdir -pm755 /etc/apt/keyrings && \
     wget -O /etc/apt/keyrings/winehq-archive.key https://dl.winehq.org/wine-builds/winehq.key && \
     wget -NP /etc/apt/sources.list.d/ https://dl.winehq.org/wine-builds/ubuntu/dists/noble/winehq-noble.sources && \
-    apt-get update && apt-get install -y --install-recommends winehq-staging
+    apt-get update && \
+    # LOCAL CHANGE (not upstream): pin Wine 11.21. Wine 11.22 made the MT5 installer die at step 7/9.
+    V="$(apt-cache madison winehq-staging | awk '{print $3}' | grep '^11\.21' | head -1)" && \
+    if [ -n "$V" ]; then \
+      apt-get install -y --install-recommends winehq-staging="$V" wine-staging="$V" wine-staging-amd64="$V" wine-staging-i386="$V"; \
+    else \
+      echo "WARNING: wine-staging 11.21 not found in the WineHQ repo, installing the newest"; \
+      apt-get install -y --install-recommends winehq-staging; \
+    fi
 
 
 # Copy configuration files
