@@ -1,0 +1,64 @@
+name: Apply update bundle
+
+# Upload ONE file named update_bundle.zip to the repo root (Add file > Upload files).
+# This workflow unpacks it into the repo with the folder paths kept, commits, and deletes the zip.
+# It only writes to the allowed paths below. It cannot change files under .github/workflows
+# (GitHub does not allow that with the built-in token): upload workflow files by hand.
+
+on:
+  push:
+    paths:
+      - "update_bundle.zip"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Unpack update_bundle.zip
+        run: |
+          test -f update_bundle.zip || { echo "::error::update_bundle.zip is not in the repo root"; exit 1; }
+          python3 - <<'PY'
+          import os, re, stat, zipfile
+          allowed = re.compile(r"^(scripts/|vendor/|docs/|mql5/|docker-compose[^/]*\.yml$|README\.md$|scan_once\.py$|mt5_execute\.py$|mt5\.ini\.example$|\.gitignore$)")
+          done, skipped = [], []
+          with zipfile.ZipFile("update_bundle.zip") as z:
+              for info in z.infolist():
+                  name = info.filename.replace("\\", "/")
+                  if info.is_dir():
+                      continue
+                  if name.startswith("/") or ".." in name.split("/"):
+                      raise SystemExit(f"unsafe path in zip: {name}")
+                  if not allowed.match(name):
+                      skipped.append(name)
+                      continue
+                  os.makedirs(os.path.dirname(name) or ".", exist_ok=True)
+                  with z.open(info) as src, open(name, "wb") as dst:
+                      dst.write(src.read())
+                  if name.endswith((".py", ".sh")):
+                      os.chmod(name, os.stat(name).st_mode | stat.S_IXUSR)
+                  done.append(name)
+          print(f"written {len(done)} files:")
+          for n in done: print("  +", n)
+          if skipped:
+              print(f"skipped {len(skipped)} (not allowed or must be uploaded by hand):")
+              for n in skipped: print("  -", n)
+          PY
+
+      - name: Commit and remove the zip
+        run: |
+          git config user.name "tse-bot"
+          git config user.email "tse-bot@users.noreply.github.com"
+          git rm -q -f update_bundle.zip || true
+          git add -A -- scripts vendor docs mql5 docker-compose.actions.yml docker-compose.hudsonventura.yml docker-compose-mt5-compiler.yml docker-compose.servers.yml README.md scan_once.py mt5_execute.py mt5.ini.example .gitignore 2>/dev/null || true
+          git status --short | head -40
+          git diff --staged --quiet && { echo "nothing changed"; exit 0; }
+          git commit -m "apply update bundle"
+          git pull --rebase || true
+          git push
